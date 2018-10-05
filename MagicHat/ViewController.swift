@@ -24,10 +24,12 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         sceneView.showsStatistics = true
         
         // Create a new scene
-        let scene = SCNScene(named: "art.scnassets/ship.scn")!
+        /*let scene = SCNScene(named: "art.scnassets/hat.scn")!
         
         // Set the scene to the view
-        sceneView.scene = scene
+        sceneView.scene = scene*/
+        
+        sceneView.scene = SCNScene()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -35,6 +37,7 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         
         // Create a session configuration
         let configuration = ARWorldTrackingConfiguration()
+        configuration.planeDetection = .horizontal
 
         // Run the view's session
         sceneView.session.run(configuration)
@@ -54,14 +57,75 @@ class ViewController: UIViewController, ARSCNViewDelegate {
 
     // MARK: - ARSCNViewDelegate
     
-/*
-    // Override to create and configure nodes for anchors added to the view's session.
-    func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
-        let node = SCNNode()
-     
+    @IBAction func didTap(_ sender: UITapGestureRecognizer) {
+        // TODO: hit test here
+        let location = sender.location(in: sceneView)
+        let results = sceneView.hitTest(location, types: .existingPlaneUsingExtent)
+        if let result = results.first {
+            placeHat(result)
+        }
+    }
+    
+    private func placeHat() {
+        
+        // Get transform of result
+        let transform = result.worldTransform
+        
+        // Get position from transform (4th column of transformation matrix)
+        let planePosition = SCNVector3Make(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+        
+        // Add door
+        let doorNode = createHatFromScene(planePosition)!
+        sceneView.scene.rootNode.addChildNode(doorNode)
+    }
+    
+    private func createHatFromScene(_ position: SCNVector3) -> SCNNode? {
+        
+        guard let url = Bundle.main.url(forResource: "art.scnassets/hat", withExtension: "scn") else {
+            NSLog("Could not find door scene")
+            return nil
+        }
+        guard let node = SCNReferenceNode(url: url) else { return nil }
+        
+        node.load()
+        
+        // Position scene
+        node.position = position
+        
         return node
     }
-*/
+    
+    private var planeNode: SCNNode?
+    
+    func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
+        // Create an SCNNode for a detect ARPlaneAnchor
+        guard let _ = anchor as? ARPlaneAnchor else {
+            return nil
+        }
+        planeNode = SCNNode()
+        return planeNode
+    }
+    
+    func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
+        // Create an SNCPlane on the ARPlane
+        guard let planeAnchor = anchor as? ARPlaneAnchor else {
+            return
+        }
+        
+        let plane = SCNPlane(width: CGFloat(planeAnchor.extent.x), height: CGFloat(planeAnchor.extent.z))
+        
+        let planeMaterial = SCNMaterial()
+        planeMaterial.diffuse.contents = UIColor(red: 255/255, green: 255/255, blue: 255/255, alpha: 0.3)
+        plane.materials = [planeMaterial]
+        
+        let planeNode = SCNNode(geometry: plane)
+        planeNode.position = SCNVector3Make(planeAnchor.center.x, 0, planeAnchor.center.z)
+        
+        planeNode.transform = SCNMatrix4MakeRotation(-Float.pi / 2, 1, 0, 0)
+        
+        node.addChildNode(planeNode)
+        placeHat()
+    }
     
     func session(_ session: ARSession, didFailWithError error: Error) {
         // Present an error message to the user
